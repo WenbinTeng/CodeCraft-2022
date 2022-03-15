@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <cmath>
 
 using namespace std;
 
@@ -198,8 +199,41 @@ void DataOutput(allocate_table_t *allocate_table) {
     fs.close();
 }
 
-int main(int argc, char const *argv[])
-{
+/**
+ * @brief 获取百分位数
+ * 
+ * @param x 边缘节点带宽向量
+ * @param q 百分位数
+ * @return double q百分位带宽值
+ */
+double getQuantile(vector<uint32_t> &x, double q=0.95){
+    const int n = x.size();
+    double id = ( n - 1 ) * q;
+    int lo = floor(id);
+    int hi = ceil(id);
+    double qs = x[lo];
+    double h = (id-lo);
+    return (1.0 - h) * qs + h * x[hi];
+}
+
+/**
+ * @brief 计算分配表
+ * 
+ * @param demand_table 客户节点带宽需求
+ * @param bandwidth_table 边缘节点带宽上限
+ * @param qos_table 客户节点与边缘节点的网络时延
+ * @param qos_constraint QoS限制
+ * @param allocate_table 分配表
+ */
+void Calculate(demand_table_t *demand_table,
+                bandwidth_table_t *bandwidth_table,
+                qos_table_t *qos_table,
+                qos_constraint_t *qos_constraint,
+                allocate_table_t *allocate_table){
+
+}
+
+int main(int argc, char const *argv[]) {
     demand_table_t demand_table; // 客户节点带宽需求
     bandwidth_table_t bandwidth_table; // 边缘节点带宽上限
     qos_table_t qos_table; // 客户节点与边缘节点的网络时延
