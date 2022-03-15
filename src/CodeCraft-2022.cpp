@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <ctime>
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -16,51 +15,38 @@ struct IdHash {
 };
 
 /**
- * @brief 请求队列向量
+ * @brief 带宽需求序列
  * 
- * @param time 请求时间
- * @param demand_line 各客户端节点带宽需求向量
- */
-typedef struct {
-    tm time;
-    vector<uint32_t> demand_line;
-} demand_line_t;
-
-/**
- * @brief 带宽需求表
- * 
- * @param header 客户节点ID向量
+ * @param id_map 客户节点ID下标映射
  * @param demand_list 请求队列向量 @see demand_line_t
  */
 typedef struct {
-    vector<string> header;
-    vector<demand_line_t> demand_list;
+    unordered_map<string, int, IdHash> id_map;
+    vector<vector<uint32_t>> demand_value;
 } demand_table_t;
 
 /**
  * @brief 边缘节点带宽上限
  * 
- * @param id_list 边缘节点ID向量
- * @param bandwidth_list 边缘节点带宽上限向量
+ * @param id_map 边缘节点ID下标映射
+ * @param bandwidth_value 边缘节点带宽上限向量
  */
 typedef struct {
-    vector<string> id_list;
-    vector<uint32_t> bandwidth_list;
+    unordered_map<string, int, IdHash> id_map;
+    vector<uint32_t> bandwidth_value;
 } bandwidth_table_t;
-
-typedef uint32_t qos_constraint_t;
 
 /**
  * @brief 网络时延QoS表
  * 
- * @param row_id 行id
- * @param col_id 列id
+ * @param row_id_map 行ID下标映射
+ * @param col_id_map 列ID下标映射
  * @param qos_value Qos
  */
 typedef struct {
-    unordered_map<string, int, IdHash> row_id;
-    unordered_map<string, int, IdHash> col_id;
-    vector<vector<qos_constraint_t>> qos_value;
+    unordered_map<string, int, IdHash> row_id_map;
+    unordered_map<string, int, IdHash> col_id_map;
+    vector<vector<uint32_t>> qos_value;
 } qos_table_t;
 
 /**
@@ -93,85 +79,79 @@ typedef struct {
  * @param qos_table 客户节点与边缘节点的网络时延
  * @param qos_constraint QoS限制
  */
-void DataLoader(demand_table_t *demand_table,
+void dataLoader(demand_table_t *demand_table,
                 bandwidth_table_t *bandwidth_table,
                 qos_table_t *qos_table,
-                qos_constraint_t *qos_constraint) {
+                uint32_t *qos_constraint) {
     ifstream fs;
     string line_buffer;
     string element_buffer;
     stringstream ss;
 
-    // read demand.csv
+    // 读取 demand.csv
     fs.open("data/demand.csv", ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer);
     ss = stringstream(line_buffer);
-    getline(ss, element_buffer, ','); // ignore table name
-    while (getline(ss, element_buffer, ',')) {
-        demand_table->header.emplace_back(element_buffer);
+    getline(ss, element_buffer, ','); // 忽略表名
+    for (int i = 0; getline(ss, element_buffer, ','); ++i) {
+        demand_table->id_map[element_buffer] = i;
     }
     while (getline(fs, line_buffer)) {
-        demand_line_t demand_line_buffer;
+        vector<uint32_t> demand_line_buffer;
         ss = stringstream(line_buffer);
-        getline(ss, element_buffer, ',');
-        sscanf(element_buffer.c_str(), "%d-%d-%dT%d:%d",
-               &demand_line_buffer.time.tm_year,
-               &demand_line_buffer.time.tm_mon,
-               &demand_line_buffer.time.tm_mday,
-               &demand_line_buffer.time.tm_hour,
-               &demand_line_buffer.time.tm_min);
+        getline(ss, element_buffer, ','); // 忽略时间戳
         while (getline(ss, element_buffer, ',')) {
-            demand_line_buffer.demand_line.emplace_back(stoi(element_buffer));
+            demand_line_buffer.emplace_back(stoi(element_buffer));
         }
-        demand_table->demand_list.emplace_back(demand_line_buffer);
+        demand_table->demand_value.emplace_back(demand_line_buffer);
     }
     fs.close();
 
-    // read bandwidth
+    // 读取 site_bandwidth.csv
     fs.open("data/site_bandwidth.csv", ios::in);
     if (!fs)
         exit(-1);
-    getline(fs, line_buffer); // ignore header
-    while (getline(fs, line_buffer)) {
+    getline(fs, line_buffer); // 忽略表头
+    for (int i = 0; getline(fs, line_buffer); ++i) {
         ss = stringstream(line_buffer);
         getline(ss, element_buffer, ',');
-        bandwidth_table->id_list.emplace_back(element_buffer);
+        bandwidth_table->id_map[element_buffer] = i;
         getline(ss, element_buffer);
-        bandwidth_table->bandwidth_list.emplace_back(stoi(element_buffer));
+        bandwidth_table->bandwidth_value.emplace_back(stoi(element_buffer));
     }
     fs.close();
 
-    // read qos
+    // 读取 qos.csv
     fs.open("data/qos.csv", ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer);
     ss = stringstream(line_buffer);
-    getline(ss, element_buffer, ','); // ignore table name
+    getline(ss, element_buffer, ','); // 忽略表名
     for (int i = 0; getline(ss, element_buffer, ','); ++i) {
-        qos_table->row_id[element_buffer] = i;
+        qos_table->col_id_map[element_buffer] = i;
     }
     for (int i = 0; getline(fs, line_buffer); ++i) {
-        vector<qos_constraint_t> qos_line_buffer;
+        vector<uint32_t> qos_line_buffer;
         ss = stringstream(line_buffer);
         getline(ss, element_buffer, ',');
-        qos_table->col_id[element_buffer] = i;
+        qos_table->row_id_map[element_buffer] = i;
         while (getline(ss, element_buffer, ',')) {
-            qos_line_buffer.emplace_back((qos_constraint_t)stoi(element_buffer));
+            qos_line_buffer.emplace_back(stoi(element_buffer));
         }
         qos_table->qos_value.emplace_back(qos_line_buffer);
     }
     fs.close();
 
-    // read qos_constrain
+    // 读取 qos_constrain
     fs.open("data/config.ini", ios::in);
     if (!fs)
         exit(-1);
-    getline(fs, line_buffer); // ignore header
+    getline(fs, line_buffer); // 忽略头部
     getline(fs, line_buffer);
-    sscanf(line_buffer.c_str(), "qos_constraint=%d\n", qos_constraint);
+    sscanf(line_buffer.c_str(), "qos_constraint=%u\n", qos_constraint);
     fs.close();
 }
 
@@ -180,7 +160,7 @@ void DataLoader(demand_table_t *demand_table,
  * 
  * @param allocate_table 分配表
  */
-void DataOutput(allocate_table_t *allocate_table) {
+void dataOutput(allocate_table_t *allocate_table) {
     ofstream fs;
     fs.open("output/solution.txt", ios::out);
     if (!fs)
@@ -206,13 +186,13 @@ void DataOutput(allocate_table_t *allocate_table) {
  * @param q 百分位数
  * @return double q百分位带宽值
  */
-double getQuantile(vector<uint32_t> &x, double q=0.95){
+double getQuantile(vector<uint32_t> &x, double q = 0.95) {
     const int n = x.size();
-    double id = ( n - 1 ) * q;
+    double id = (n - 1) * q;
     int lo = floor(id);
     int hi = ceil(id);
     double qs = x[lo];
-    double h = (id-lo);
+    double h = (id - lo);
     return (1.0 - h) * qs + h * x[hi];
 }
 
@@ -225,10 +205,10 @@ double getQuantile(vector<uint32_t> &x, double q=0.95){
  * @param qos_constraint QoS限制
  * @param allocate_table 分配表
  */
-void Calculate(demand_table_t *demand_table,
+void calculate(demand_table_t *demand_table,
                 bandwidth_table_t *bandwidth_table,
                 qos_table_t *qos_table,
-                qos_constraint_t *qos_constraint,
+                uint32_t *qos_constraint,
                 allocate_table_t *allocate_table){
 
 }
@@ -237,14 +217,14 @@ int main(int argc, char const *argv[]) {
     demand_table_t demand_table; // 客户节点带宽需求
     bandwidth_table_t bandwidth_table; // 边缘节点带宽上限
     qos_table_t qos_table; // 客户节点与边缘节点的网络时延
-    qos_constraint_t qos_constraint; // QoS限制
+    uint32_t qos_constraint; // QoS限制
     allocate_table_t allocate_table; // 分配表
 
     // 1. 数据预处理
-    DataLoader(&demand_table, &bandwidth_table, &qos_table, &qos_constraint);
+    dataLoader(&demand_table, &bandwidth_table, &qos_table, &qos_constraint);
     // 2. 计算分配表
     // 3. 输出
-    DataOutput(&allocate_table);
+    dataOutput(&allocate_table);
 
     return 0;
 }
