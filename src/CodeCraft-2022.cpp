@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <cmath>
 
 using namespace std;
 
@@ -14,16 +15,34 @@ struct IdHash {
     }
 };
 
+/**
+ * @brief 请求队列向量
+ * 
+ * @param time 请求时间
+ * @param demand_line 各客户端节点带宽需求向量
+ */
 typedef struct {
     tm time;
     vector<uint32_t> demand_line;
 } demand_line_t;
 
+/**
+ * @brief 带宽需求表
+ * 
+ * @param header 客户节点ID向量
+ * @param demand_list 请求队列向量 @see demand_line_t
+ */
 typedef struct {
     vector<string> header;
     vector<demand_line_t> demand_list;
 } demand_table_t;
 
+/**
+ * @brief 边缘节点带宽上限
+ * 
+ * @param id_list 边缘节点ID向量
+ * @param bandwidth_list 边缘节点带宽上限向量
+ */
 typedef struct {
     vector<string> id_list;
     vector<uint32_t> bandwidth_list;
@@ -31,26 +50,49 @@ typedef struct {
 
 typedef uint32_t qos_constraint_t;
 
+/**
+ * @brief 网络时延QoS表
+ * 
+ * @param row_id 行id
+ * @param col_id 列id
+ * @param qos_value Qos
+ */
 typedef struct {
     unordered_map<string, int, IdHash> row_id;
     unordered_map<string, int, IdHash> col_id;
     vector<vector<qos_constraint_t>> qos_value;
 } qos_table_t;
 
+/**
+ * @brief 带宽调度分配方案
+ * 
+ * @param custom_id 客户端ID
+ * @param site_id_list 
+ * @param bandwidth_list 带宽需求向量
+ */
 typedef struct {
     string custom_id;
     vector<string> site_id_list;
     vector<uint32_t> bandwidth_list;
 } allocate_line_t;
 
+/**
+ * @brief 带宽调度分配表
+ * 
+ * @param allocate_list 分配向量 
+ */
 typedef struct {
     vector<allocate_line_t> allocate_list;
 } allocate_table_t;
 
-int getIdHash(string& s) {
-    return s.size() == 1 ? (int)s[0] : (int)s[1] << 8 | s[0];
-}
-
+/**
+ * @brief 数据预处理
+ * 
+ * @param demand_table 客户节点带宽需求
+ * @param bandwidth_table 边缘节点带宽上限
+ * @param qos_table 客户节点与边缘节点的网络时延
+ * @param qos_constraint QoS限制
+ */
 void DataLoader(demand_table_t *demand_table,
                 bandwidth_table_t *bandwidth_table,
                 qos_table_t *qos_table,
@@ -133,7 +175,12 @@ void DataLoader(demand_table_t *demand_table,
     fs.close();
 }
 
-void DataSet(allocate_table_t *allocate_table) {
+/**
+ * @brief 分配方案写入到文件
+ * 
+ * @param allocate_table 分配表
+ */
+void DataOutput(allocate_table_t *allocate_table) {
     ofstream fs;
     fs.open("output/solution.txt", ios::out);
     if (!fs)
@@ -152,16 +199,52 @@ void DataSet(allocate_table_t *allocate_table) {
     fs.close();
 }
 
-int main(int argc, char const *argv[])
-{
-    demand_table_t demand_table;
-    bandwidth_table_t bandwidth_table;
-    qos_table_t qos_table;
-    qos_constraint_t qos_constraint;
-    allocate_table_t allocate_table;
+/**
+ * @brief 获取百分位数
+ * 
+ * @param x 边缘节点带宽向量
+ * @param q 百分位数
+ * @return double q百分位带宽值
+ */
+double getQuantile(vector<uint32_t> &x, double q=0.95){
+    const int n = x.size();
+    double id = ( n - 1 ) * q;
+    int lo = floor(id);
+    int hi = ceil(id);
+    double qs = x[lo];
+    double h = (id-lo);
+    return (1.0 - h) * qs + h * x[hi];
+}
 
+/**
+ * @brief 计算分配表
+ * 
+ * @param demand_table 客户节点带宽需求
+ * @param bandwidth_table 边缘节点带宽上限
+ * @param qos_table 客户节点与边缘节点的网络时延
+ * @param qos_constraint QoS限制
+ * @param allocate_table 分配表
+ */
+void Calculate(demand_table_t *demand_table,
+                bandwidth_table_t *bandwidth_table,
+                qos_table_t *qos_table,
+                qos_constraint_t *qos_constraint,
+                allocate_table_t *allocate_table){
+
+}
+
+int main(int argc, char const *argv[]) {
+    demand_table_t demand_table; // 客户节点带宽需求
+    bandwidth_table_t bandwidth_table; // 边缘节点带宽上限
+    qos_table_t qos_table; // 客户节点与边缘节点的网络时延
+    qos_constraint_t qos_constraint; // QoS限制
+    allocate_table_t allocate_table; // 分配表
+
+    // 1. 数据预处理
     DataLoader(&demand_table, &bandwidth_table, &qos_table, &qos_constraint);
-    DataSet(&allocate_table);
+    // 2. 计算分配表
+    // 3. 输出
+    DataOutput(&allocate_table);
 
     return 0;
 }
