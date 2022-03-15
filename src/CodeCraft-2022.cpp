@@ -18,7 +18,7 @@ struct IdHash {
  * @brief 带宽需求序列
  * 
  * @param id_map 客户节点ID下标映射
- * @param demand_list 请求队列向量 @see demand_line_t
+ * @param demand_value 请求队列向量
  */
 typedef struct {
     unordered_map<string, int, IdHash> id_map;
@@ -28,7 +28,6 @@ typedef struct {
 /**
  * @brief 边缘节点带宽上限
  * 
- * @param id_map 边缘节点ID下标映射
  * @param bandwidth_value 边缘节点带宽上限向量
  */
 typedef struct {
@@ -38,13 +37,13 @@ typedef struct {
 /**
  * @brief 网络时延QoS表
  * 
- * @param row_id_map 行ID下标映射
- * @param col_id_map 列ID下标映射
+ * @param server_id_map 行ID下标映射
+ * @param client_id_map 列ID下标映射
  * @param qos_value Qos
  */
 typedef struct {
-    unordered_map<string, int, IdHash> row_id_map;
-    unordered_map<string, int, IdHash> col_id_map;
+    unordered_map<string, int, IdHash> server_id_map;
+    unordered_map<string, int, IdHash> client_id_map;
     vector<vector<uint32_t>> qos_value;
 } qos_table_t;
 
@@ -130,13 +129,13 @@ void dataLoader(demand_table_t *demand_table,
     ss = stringstream(line_buffer);
     getline(ss, element_buffer, ','); // 忽略表名
     for (int i = 0; getline(ss, element_buffer, ','); ++i) {
-        qos_table->col_id_map[element_buffer] = i;
+        qos_table->client_id_map[element_buffer] = i;
     }
     for (int i = 0; getline(fs, line_buffer); ++i) {
         vector<uint32_t> qos_line_buffer;
         ss = stringstream(line_buffer);
         getline(ss, element_buffer, ',');
-        qos_table->row_id_map[element_buffer] = i;
+        qos_table->server_id_map[element_buffer] = i;
         while (getline(ss, element_buffer, ',')) {
             qos_line_buffer.emplace_back(stoi(element_buffer));
         }
@@ -201,10 +200,10 @@ uint32_t getQuantile(vector<uint32_t> &x, double q = 0.95) {
  * @param allocate_table 分配表
  */
 void calculate(demand_table_t *demand_table,
-                bandwidth_table_t *bandwidth_table,
-                qos_table_t *qos_table,
-                uint32_t *qos_constraint,
-                allocate_table_t *allocate_table){
+               bandwidth_table_t *bandwidth_table,
+               qos_table_t *qos_table,
+               uint32_t *qos_constraint,
+               allocate_table_t *allocate_table){
 
 }
 
