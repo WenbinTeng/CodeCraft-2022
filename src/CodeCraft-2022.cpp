@@ -32,8 +32,7 @@ typedef struct {
  * @param bandwidth_value 边缘节点带宽上限向量
  */
 typedef struct {
-    unordered_map<string, int, IdHash> id_map;
-    vector<uint32_t> bandwidth_value;
+    unordered_map<string, uint32_t> bandwidth_value;
 } bandwidth_table_t;
 
 /**
@@ -115,11 +114,11 @@ void dataLoader(demand_table_t *demand_table,
         exit(-1);
     getline(fs, line_buffer); // 忽略表头
     for (int i = 0; getline(fs, line_buffer); ++i) {
+        string id;
         ss = stringstream(line_buffer);
-        getline(ss, element_buffer, ',');
-        bandwidth_table->id_map[element_buffer] = i;
+        getline(ss, id, ',');
         getline(ss, element_buffer);
-        bandwidth_table->bandwidth_value.emplace_back(stoi(element_buffer));
+        bandwidth_table->bandwidth_value[id] = stoi(element_buffer);
     }
     fs.close();
 
