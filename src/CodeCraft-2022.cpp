@@ -84,10 +84,6 @@ typedef struct {
     vector<allocate_line_t> allocate_list;
 } allocate_table_t;
 
-int getIdHash(string& s) {
-    return s.size() == 1 ? (int)s[0] : (int)s[1] << 8 | s[0];
-}
-
 /**
  * @brief 数据预处理
  * 
