@@ -8,6 +8,12 @@
 
 using namespace std;
 
+struct IdHash {
+    size_t operator()(const string &s) const {
+        return s.size() == 1 ? (size_t)s[0] : (size_t)s[1] << 8 | s[0];
+    }
+};
+
 typedef struct {
     tm time;
     vector<uint32_t> demand_line;
@@ -23,13 +29,13 @@ typedef struct {
     vector<uint32_t> bandwidth_list;
 } bandwidth_table_t;
 
-typedef struct {
-    unordered_map<int, int> row_id;
-    unordered_map<int, int> col_id;
-    vector<vector<int>> qos_value;
-} qos_table_t;
-
 typedef uint32_t qos_constraint_t;
+
+typedef struct {
+    unordered_map<string, int, IdHash> row_id;
+    unordered_map<string, int, IdHash> col_id;
+    vector<vector<qos_constraint_t>> qos_value;
+} qos_table_t;
 
 typedef struct {
     string custom_id;
@@ -103,15 +109,15 @@ void DataLoader(demand_table_t *demand_table,
     ss = stringstream(line_buffer);
     getline(ss, element_buffer, ','); // ignore table name
     for (int i = 0; getline(ss, element_buffer, ','); ++i) {
-        qos_table->row_id[getIdHash(element_buffer)] = i;
+        qos_table->row_id[element_buffer] = i;
     }
     for (int i = 0; getline(fs, line_buffer); ++i) {
-        vector<int> qos_line_buffer;
+        vector<qos_constraint_t> qos_line_buffer;
         ss = stringstream(line_buffer);
         getline(ss, element_buffer, ',');
-        qos_table->col_id[getIdHash(element_buffer)] = i;
+        qos_table->col_id[element_buffer] = i;
         while (getline(ss, element_buffer, ',')) {
-            qos_line_buffer.emplace_back(stoi(element_buffer));
+            qos_line_buffer.emplace_back((qos_constraint_t)stoi(element_buffer));
         }
         qos_table->qos_value.emplace_back(qos_line_buffer);
     }
