@@ -184,16 +184,12 @@ void dataOutput(allocate_table_t *allocate_table) {
  * 
  * @param x 边缘节点带宽向量
  * @param q 百分位数
- * @return double q百分位带宽值
+ * @return uint32_t q百分位带宽值
  */
-double getQuantile(vector<uint32_t> &x, double q = 0.95) {
+uint32_t getQuantile(vector<uint32_t> &x, double q = 0.95) {
     const int n = x.size();
-    double id = (n - 1) * q;
-    int lo = floor(id);
-    int hi = ceil(id);
-    double qs = x[lo];
-    double h = (id - lo);
-    return (1.0 - h) * qs + h * x[hi];
+    int id = ceil(n * q);
+    return x[id];
 }
 
 /**
@@ -223,6 +219,7 @@ int main(int argc, char const *argv[]) {
     // 1. 数据预处理
     dataLoader(&demand_table, &bandwidth_table, &qos_table, &qos_constraint);
     // 2. 计算分配表
+    calculate(&demand_table, &bandwidth_table, &qos_table, &qos_constraint, &allocate_table);
     // 3. 输出
     dataOutput(&allocate_table);
 
