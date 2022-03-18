@@ -9,6 +9,12 @@
 
 using namespace std;
 
+string demand_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\demand.csv";
+string site_bandwidth_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\site_bandwidth.csv";
+string qos_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\qos.csv";
+string config_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\config.ini";
+string solution_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\output\\solution.txt";
+
 struct IdHash {
     size_t operator()(const string &s) const {
         return s.size() == 1 ? (size_t)s[0] : (size_t)s[1] << 8 | s[0];
@@ -67,7 +73,7 @@ void data_loader(demand_table_t &demand_table,
     stringstream ss;
 
     // 读取 demand.csv
-    fs.open("data/demand.csv", ios::in);
+    fs.open(demand_file_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer);
@@ -88,7 +94,7 @@ void data_loader(demand_table_t &demand_table,
     fs.close();
 
     // 读取 site_bandwidth.csv
-    fs.open("data/site_bandwidth.csv", ios::in);
+    fs.open(site_bandwidth_file_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer); // 忽略表头
@@ -102,7 +108,7 @@ void data_loader(demand_table_t &demand_table,
     fs.close();
 
     // 读取 qos.csv
-    fs.open("data/qos.csv", ios::in);
+    fs.open(qos_file_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer);
@@ -124,7 +130,7 @@ void data_loader(demand_table_t &demand_table,
     fs.close();
 
     // 读取 qos_constrain
-    fs.open("data/config.ini", ios::in);
+    fs.open(config_file_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer); // 忽略头部
@@ -140,7 +146,7 @@ void data_loader(demand_table_t &demand_table,
  */
 void data_output(vector<allocate_table_t> &allocate_tables) {
     ofstream fs;
-    fs.open("output/solution.txt", ios::out);
+    fs.open(solution_file_path, ios::out);
     if (!fs)
         exit(-1);
     for (int i = 0; i < allocate_tables.size(); ++i) {
