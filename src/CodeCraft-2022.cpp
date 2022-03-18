@@ -173,6 +173,14 @@ void data_output(vector<allocate_table_t> &allocate_tables) {
     fs.close();
 }
 
+/**
+ * @brief 获取某一客户节点的可达边缘节点
+ * 
+ * @param client_id 客户节点ID
+ * @param qos_table 
+ * @param qos_constraint QoS限制
+ * @return vector<string> 
+ */
 vector<string> get_valid_server(const string &client_id, qos_table_t &qos_table, uint32_t qos_constraint) {
     vector<string> ret;
     for (const auto [server_id, server_index] : qos_table.server_id_map) {
@@ -183,6 +191,13 @@ vector<string> get_valid_server(const string &client_id, qos_table_t &qos_table,
     return ret;
 }
 
+/**
+ * @brief 从客户节点的可达边缘节点中获取最大剩余节点
+ * 
+ * @param server_id 可达边缘节点列表
+ * @param server_bandwidth 边缘节点总带宽
+ * @return string 边缘节点ID
+ */
 string get_match_server(vector<string> &server_id, bandwidth_table_t &server_bandwidth) {
     int idx = 0;
     int max = 0;
@@ -195,50 +210,62 @@ string get_match_server(vector<string> &server_id, bandwidth_table_t &server_ban
     return server_id[idx];
 }
 
+/**
+ * @brief 计算某一时刻的分配方案
+ * 
+ * @param demand_table 总时刻请求表
+ * @param demand_index 该时刻
+ * @param qos_table Qos表
+ * @param qos_constraint QoS限制
+ * @param bandwidth_table 边缘节点带宽
+ * @return allocate_table_t 
+ */
 allocate_table_t calculate_atime(demand_table_t &demand_table,
                                  uint32_t demand_index,
                                  qos_table_t &qos_table,
                                  uint32_t qos_constraint,
                                  bandwidth_table_t &bandwidth_table) {
     uint32_t slice = 100;
-    allocate_table_t client_bandwidth;
-    bandwidth_table_t server_bandwidth(bandwidth_table);
+    allocate_table_t client_bandwidth; // 分配方案
+    bandwidth_table_t server_bandwidth(bandwidth_table); // 拷贝边缘节点带宽
     queue<pair<string, uint32_t>> demand_queue;
     unordered_map<string, vector<string>, IdHash> valid_server_list;
 
+    // 初始化分配方案、请求队列、可用边缘节点列表
     for (const auto& [client_id, client_index] : demand_table.id_map) {
-        auto client_demand = demand_table.demand_value[demand_index][client_index];
+        // 客户节点需求
+        uint32_t client_demand = demand_table.demand_value[demand_index][client_index]; 
         client_bandwidth[client_id] = {};
         if (client_demand > 0) {
             demand_queue.push({client_id, client_demand});
             valid_server_list[client_id] = get_valid_server(client_id, qos_table, qos_constraint);
         }
     }
+    // 遍历请求队列
     while (!demand_queue.empty()) {
-        auto front = demand_queue.front();
+        pair<string, uint32_t> front = demand_queue.front();
         demand_queue.pop();
-        auto& valid_server = valid_server_list[front.first];
-        auto match_server = get_match_server(valid_server, server_bandwidth);
+        vector<string>& valid_server = valid_server_list[front.first];
+        string match_server = get_match_server(valid_server, server_bandwidth);
+        slice = get_auto_slice(front.second, valid_server, server_bandwidth);
+        if(slice == 0) continue;
         if (front.second > slice) {
             if (server_bandwidth[match_server] >= slice) {
                 client_bandwidth[front.first][match_server] += slice;
                 server_bandwidth[match_server] -= slice;
                 front.second -= slice;
                 demand_queue.push(front);
-            }
-            else {
+            } else {
                 client_bandwidth[front.first][match_server] += server_bandwidth[match_server];
                 front.second -= server_bandwidth[match_server];
                 server_bandwidth[match_server] = 0;
                 demand_queue.push(front);
             }
-        }
-        else {
+        } else {
             if (server_bandwidth[match_server] >= front.second) {
                 client_bandwidth[front.first][match_server] += front.second;
                 server_bandwidth[match_server] -= front.second;
-            }
-            else {
+            } else {
                 client_bandwidth[front.first][match_server] += server_bandwidth[match_server];
                 front.second -= server_bandwidth[match_server];
                 server_bandwidth[match_server] = 0;
@@ -264,6 +291,7 @@ vector<allocate_table_t> calculate(demand_table_t &demand_table,
                                    qos_table_t &qos_table,
                                    uint32_t qos_constraint) {
     vector<allocate_table_t> ret;
+    // 遍历每一组请求
     for (int i = 0; i < demand_table.demand_value.size(); ++i) {
         ret.emplace_back(calculate_atime(demand_table, i, qos_table, qos_constraint, bandwidth_table));
     }
