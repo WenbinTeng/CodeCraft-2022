@@ -176,7 +176,7 @@ void data_output(vector<allocate_table_t> &allocate_tables) {
 vector<string> get_valid_server(const string &client_id, qos_table_t &qos_table, uint32_t qos_constraint) {
     vector<string> ret;
     for (const auto [server_id, server_index] : qos_table.server_id_map) {
-        if (qos_table.qos_value[server_index][qos_table.client_id_map[client_id]] <= qos_constraint) {
+        if (qos_table.qos_value[server_index][qos_table.client_id_map[client_id]] < qos_constraint) {
             ret.emplace_back(server_id);
         }
     }
