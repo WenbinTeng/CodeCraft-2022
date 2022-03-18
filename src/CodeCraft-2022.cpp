@@ -218,6 +218,24 @@ string get_match_server(vector<string> &server_id, bandwidth_table_t &server_ban
 }
 
 /**
+ * @brief 自动调整切片大小
+ * 
+ * @param demand 需求带宽
+ * @param server_id 可达边缘节点列表
+ * @param server_bandwidth 边缘节点总带宽
+ * @return uint32_t 切片大小
+ */
+uint32_t get_auto_slice(uint32_t demand, vector<string> &server_id, bandwidth_table_t &server_bandwidth) {
+    int cnt = 0;
+    for (int i = 0; i < server_id.size(); ++i) {
+        if (server_bandwidth[server_id[i]] > 0) {
+            cnt++;
+        }
+    }
+    return demand < cnt ? demand : demand / cnt ;
+}
+
+/**
  * @brief 计算某一时刻的分配方案
  * 
  * @param demand_table 总时刻请求表
