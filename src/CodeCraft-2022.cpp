@@ -9,11 +9,18 @@
 
 using namespace std;
 
+// 文件路径 - Develop
 string demand_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\demand.csv";
 string site_bandwidth_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\site_bandwidth.csv";
 string qos_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\qos.csv";
 string config_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\config.ini";
 string solution_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\output\\solution.txt";
+// 文件路径 - Product
+// string demand_file_path = "/data/demand.csv";
+// string site_bandwidth_file_path = "/data/site_bandwidth.csv";
+// string qos_file_path = "/data/qos.csv";
+// string config_file_path = "/data/config.ini";
+// string solution_file_path = "/output/solution.txt";
 
 struct IdHash {
     size_t operator()(const string &s) const {
