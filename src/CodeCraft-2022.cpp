@@ -155,11 +155,18 @@ void data_output(vector<allocate_table_t> &allocate_tables) {
         for (const auto& [client_id, allocate_list] : allocate_tables[i]) {
             if (client_id != allocate_tables[i].begin()->first)
                 fs << endl;
-            fs << client_id << ':';
+            for (auto c : client_id)
+                if (c != '\n' && c != '\r')
+                    fs << c;
+            fs << ':';
             for (const auto& [server_id, allocate_bandwidth] : allocate_list) {
                 if (server_id != allocate_list.begin()->first)
                     fs << ',';
-                fs << '<' << server_id << ',' << allocate_bandwidth << '>';
+                fs << '<';
+                for (auto c : server_id)
+                    if (c != '\n' && c != '\r')
+                        fs << c;
+                fs << ',' << allocate_bandwidth << '>';
             }
         }
     }
