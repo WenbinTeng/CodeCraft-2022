@@ -74,6 +74,8 @@ void data_loader(demand_table_t &demand_table,
     ss = stringstream(line_buffer);
     getline(ss, element_buffer, ','); // 忽略表名
     for (int i = 0; getline(ss, element_buffer, ','); ++i) {
+        if (int pos = element_buffer.find('\r') != -1) element_buffer.erase(pos, 1);
+        if (int pos = element_buffer.find('\n') != -1) element_buffer.erase(pos, 1);
         demand_table.id_map[element_buffer] = i;
     }
     while (getline(fs, line_buffer)) {
@@ -96,6 +98,8 @@ void data_loader(demand_table_t &demand_table,
         string id_buffer;
         ss = stringstream(line_buffer);
         getline(ss, id_buffer, ',');
+        if (int pos = id_buffer.find('\r') != -1) id_buffer.erase(pos, 1);
+        if (int pos = id_buffer.find('\n') != -1) id_buffer.erase(pos, 1);
         getline(ss, element_buffer);
         bandwidth_table[id_buffer] = stoi(element_buffer);
     }
@@ -109,6 +113,8 @@ void data_loader(demand_table_t &demand_table,
     ss = stringstream(line_buffer);
     getline(ss, element_buffer, ','); // 忽略表名
     for (int i = 0; getline(ss, element_buffer, ','); ++i) {
+        if (int pos = element_buffer.find('\r') != -1) element_buffer.erase(pos, 1);
+        if (int pos = element_buffer.find('\n') != -1) element_buffer.erase(pos, 1);
         qos_table.client_id_map[element_buffer] = i;
     }
     for (int i = 0; getline(fs, line_buffer); ++i) {
@@ -146,11 +152,11 @@ void data_output(vector<allocate_table_t> &allocate_tables) {
     for (int i = 0; i < allocate_tables.size(); ++i) {
         if (i > 0)
             fs << endl;
-        for (const auto& [client_id, allocate_list] : allocate_tables[i]) {
+        for (auto& [client_id, allocate_list] : allocate_tables[i]) {
             if (client_id != allocate_tables[i].begin()->first)
                 fs << endl;
             fs << client_id << ':';
-            for (const auto& [server_id, allocate_bandwidth] : allocate_list) {
+            for (auto& [server_id, allocate_bandwidth] : allocate_list) {
                 if (server_id != allocate_list.begin()->first)
                     fs << ',';
                 fs << '<' << server_id << ',' << allocate_bandwidth << '>';
@@ -163,7 +169,7 @@ void data_output(vector<allocate_table_t> &allocate_tables) {
 vector<string> get_valid_server(const string &client_id, qos_table_t &qos_table, uint32_t qos_constraint) {
     vector<string> ret;
     for (const auto [server_id, server_index] : qos_table.server_id_map) {
-        if (qos_table.qos_value[server_index][qos_table.client_id_map[client_id]] <= qos_constraint) {
+        if (qos_table.qos_value[server_index][qos_table.client_id_map[client_id]] < qos_constraint) {
             ret.emplace_back(server_id);
         }
     }
