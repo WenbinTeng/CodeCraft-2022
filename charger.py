@@ -153,28 +153,26 @@ def billing():
     for i in range(len(Site)):
         charge_95=sorted(Site[i].used)
         point=math.ceil(len(charge_95)*0.95)-1
-        sum.append(charge_95[point]*Site[i].price)
+        val = charge_95[point]*Site[i].price
+        sum.append(val)
+        if val != 0:
+            print(i, val)
     return sum
 
 
 if __name__ == '__main__':
     #读取输入文件
-    demandFile = 'data/demand.csv'
-    site_bandwidthFile = 'data/site_bandwidth.csv'
+    type = "simulated_data_4000"
+    
+    demandFile = type + '/demand.csv'
+    site_bandwidthFile = type + '/site_bandwidth.csv'
     solutionFile = 'output/solution.txt'
-    qosFile='data/qos.csv'
+    qosFile = type + '/qos.csv'
 
-    qos_constraint=400
+    qos_constraint = 274
     Client,Client_Count,Time_count=readDemand(demandFile)
     Site = readSite(site_bandwidthFile)
     readQos(qosFile)
     readSolution(solutionFile)
     price=billing()
-    # print(price)
-    print(sum(price))
-
-
-
-
-
-
+    print("total", sum(price))
