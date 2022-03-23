@@ -280,29 +280,13 @@ allocate_table_t calculate_atime(demand_table_t &demand_table,
         slice = get_auto_slice(front.second, valid_server, server_bandwidth);
         string match_server = get_match_server(slice, valid_server, server_bandwidth, visit);
         if(slice == 0) continue;
-        if (front.second > slice) {
-            if (server_bandwidth[match_server] >= slice) {
-                client_bandwidth[front.first][match_server] += slice;
-                server_bandwidth[match_server] -= slice;
-                front.second -= slice;
-                demand_queue.push(front);
-            } else {
-                client_bandwidth[front.first][match_server] += server_bandwidth[match_server];
-                front.second -= server_bandwidth[match_server];
-                server_bandwidth[match_server] = 0;
-                demand_queue.push(front);
-            }
-        } else {
-            if (server_bandwidth[match_server] >= front.second) {
-                client_bandwidth[front.first][match_server] += front.second;
-                server_bandwidth[match_server] -= front.second;
-            } else {
-                client_bandwidth[front.first][match_server] += server_bandwidth[match_server];
-                front.second -= server_bandwidth[match_server];
-                server_bandwidth[match_server] = 0;
-                demand_queue.push(front);
-            }
-        }
+        // 分配带宽
+        slice = min(server_bandwidth[match_server], min(front.second, slice));
+        client_bandwidth[front.first][match_server] += slice;
+        front.second -= slice;
+        server_bandwidth[match_server] -= slice;
+        // 如果请求没有完全满足，再push回队列
+        if(front.second > 0) demand_queue.push(front);
     }
 
     return client_bandwidth;
