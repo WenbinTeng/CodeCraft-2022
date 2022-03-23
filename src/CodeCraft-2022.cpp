@@ -6,14 +6,18 @@
 #include <string>
 #include <unordered_map>
 #include <cmath>
+#include <algorithm>
+#include <random>
+#include <chrono>
 
 using namespace std;
 
 // 文件路径 - Develop
-string demand_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\demand.csv";
-string site_bandwidth_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\site_bandwidth.csv";
-string qos_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\qos.csv";
-string config_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\data\\config.ini";
+string type = "simulated_data_4000";
+string demand_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\" + type + "\\demand.csv";
+string site_bandwidth_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\" + type + "\\site_bandwidth.csv";
+string qos_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\" + type + "\\qos.csv";
+string config_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\" + type + "\\config.ini";
 string solution_file_path = "D:\\Users\\a1126\\Desktop\\CodeCraft-2022\\output\\solution.txt";
 // 文件路径 - Product
 // string demand_file_path = "/data/demand.csv";
@@ -205,20 +209,14 @@ vector<string> get_valid_server(const string &client_id, qos_table_t &qos_table,
  * @param server_bandwidth 边缘节点总带宽
  * @return string 边缘节点ID
  */
-string get_match_server(uint32_t slice, vector<string> &server_id, bandwidth_table_t &server_bandwidth, vector<int> &visit) {
+string get_match_server(vector<string> &server_id, bandwidth_table_t &server_bandwidth) {
     int idx = 0;
-    int max = 0;
-    int target_vis = 0;
-    while(!max){
-        for (int i = 0; i < server_id.size(); ++i) {
-            if(visit[i]==target_vis && max < server_bandwidth[server_id[i]] && server_bandwidth[server_id[i]] >= slice) {
-                max = server_bandwidth[server_id[i]];
-                idx = i;
-            }
-            if(i == server_id.size()) target_vis++;
+    for(int i=0; i<server_id.size(); i++){
+        if(server_bandwidth[server_id[i]] > 0){
+            idx = i;
+            break;
         }
     }
-    visit[idx] = target_vis + 1;
     return server_id[idx];
 }
 
@@ -240,6 +238,10 @@ uint32_t get_auto_slice(uint32_t demand, vector<string> &server_id, bandwidth_ta
     return demand < cnt ? demand : demand / cnt ;
 }
 
+bool cmp(const pair<string, uint32_t> &x1, const pair<string, uint32_t> &x2){
+    return x1.second > x2.second;
+}
+
 /**
  * @brief 计算某一时刻的分配方案
  * 
@@ -259,6 +261,7 @@ allocate_table_t calculate_atime(demand_table_t &demand_table,
     allocate_table_t client_bandwidth; // 分配方案
     bandwidth_table_t server_bandwidth(bandwidth_table); // 拷贝边缘节点带宽
     queue<pair<string, uint32_t>> demand_queue;
+    vector<pair<string, uint32_t>> demand_queue_unshuffle;
     unordered_map<string, vector<string>, IdHash> valid_server_list;
 
     // 初始化分配方案、请求队列、可用边缘节点列表
@@ -271,14 +274,19 @@ allocate_table_t calculate_atime(demand_table_t &demand_table,
             valid_server_list[client_id] = get_valid_server(client_id, qos_table, qos_constraint);
         }
     }
+    // 打乱请求顺序
+    sort(demand_queue_unshuffle.begin(), demand_queue_unshuffle.end(), cmp);
+    // 构造请求队列
+    for(int i=0; i<demand_queue_unshuffle.size(); i++){
+        demand_queue.push({demand_queue_unshuffle[i].first, demand_queue_unshuffle[i].second});
+    }
     // 遍历请求队列
     while (!demand_queue.empty()) {
         pair<string, uint32_t> front = demand_queue.front();
         demand_queue.pop();
         vector<string>& valid_server = valid_server_list[front.first];
-        vector<int> visit(valid_server.size(), 0); // 访问数组,检测后发现分数无变化
         slice = get_auto_slice(front.second, valid_server, server_bandwidth);
-        string match_server = get_match_server(slice, valid_server, server_bandwidth, visit);
+        string match_server = get_match_server(valid_server, server_bandwidth);
         if(slice == 0) continue;
         // 分配带宽
         slice = min(server_bandwidth[match_server], min(front.second, slice));
