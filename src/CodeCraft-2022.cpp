@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <cmath>
+#include <algorithm>
 
 using namespace std;
 
@@ -178,10 +179,10 @@ vector<string> get_valid_server(const string &client_id, qos_table_t &qos_table,
 
 string get_match_server(vector<string> &server_id, bandwidth_table_t &server_bandwidth) {
     int idx = 0;
-    int max = 0;
+    int min = 0x7fffffff;
     for (int i = 0; i < server_id.size(); ++i) {
-        if (max < server_bandwidth[server_id[i]]) {
-            max = server_bandwidth[server_id[i]];
+        if (min > server_bandwidth[server_id[i]]) {
+            min = server_bandwidth[server_id[i]];
             idx = i;
         }
     }
@@ -196,6 +197,7 @@ allocate_table_t calculate_atime(demand_table_t &demand_table,
     uint32_t slice = 100;
     allocate_table_t client_bandwidth;
     bandwidth_table_t server_bandwidth(bandwidth_table);
+    bandwidth_table_t global_bandwidth;
     queue<pair<string, uint32_t>> demand_queue;
     unordered_map<string, vector<string>, IdHash> valid_server_list;
 
@@ -211,33 +213,13 @@ allocate_table_t calculate_atime(demand_table_t &demand_table,
         auto front = demand_queue.front();
         demand_queue.pop();
         auto& valid_server = valid_server_list[front.first];
-        auto match_server = get_match_server(valid_server, server_bandwidth);
-        if (front.second > slice) {
-            if (server_bandwidth[match_server] >= slice) {
-                client_bandwidth[front.first][match_server] += slice;
-                server_bandwidth[match_server] -= slice;
-                front.second -= slice;
-                demand_queue.push(front);
-            }
-            else {
-                client_bandwidth[front.first][match_server] += server_bandwidth[match_server];
-                front.second -= server_bandwidth[match_server];
-                server_bandwidth[match_server] = 0;
-                demand_queue.push(front);
-            }
-        }
-        else {
-            if (server_bandwidth[match_server] >= front.second) {
-                client_bandwidth[front.first][match_server] += front.second;
-                server_bandwidth[match_server] -= front.second;
-            }
-            else {
-                client_bandwidth[front.first][match_server] += server_bandwidth[match_server];
-                front.second -= server_bandwidth[match_server];
-                server_bandwidth[match_server] = 0;
-                demand_queue.push(front);
-            }
-        }
+        auto match_server = get_match_server(valid_server, global_bandwidth);
+        uint32_t s = min(slice, min(front.second, server_bandwidth[match_server]));
+        client_bandwidth[front.first][match_server] += s;
+        server_bandwidth[match_server] -= s;
+        global_bandwidth[match_server] += s;
+        front.second -= s;
+        if (front.second > 0) demand_queue.push(front);
     }
 
     return client_bandwidth;
@@ -256,9 +238,24 @@ vector<allocate_table_t> calculate(demand_table_t &demand_table,
                                    bandwidth_table_t &bandwidth_table,
                                    qos_table_t &qos_table,
                                    uint32_t qos_constraint) {
-    vector<allocate_table_t> ret;
+    vector<allocate_table_t> ret(demand_table.demand_value.size());
     for (int i = 0; i < demand_table.demand_value.size(); ++i) {
-        ret.emplace_back(calculate_atime(demand_table, i, qos_table, qos_constraint, bandwidth_table));
+        int sum = 0;
+        for (int j = 0; j < demand_table.demand_value[i].size(); ++j) {
+            sum += demand_table.demand_value[i][j];
+        }
+        demand_table.demand_value[i].push_back(i);
+        demand_table.demand_value[i].push_back(sum);
+    }
+    sort(demand_table.demand_value.begin(), demand_table.demand_value.end(), [](vector<uint32_t>& a, vector<uint32_t>& b){
+        return a.back() > b.back();
+    });
+    for (int i = 0; i < demand_table.demand_value.size(); ++i) {
+        int sum = demand_table.demand_value[i].back();
+        demand_table.demand_value[i].pop_back();
+        int idx = demand_table.demand_value[i].back();
+        demand_table.demand_value[i].pop_back();
+        ret[idx] = calculate_atime(demand_table, i, qos_table, qos_constraint, bandwidth_table);
     }
     return ret;
 }
