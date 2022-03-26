@@ -51,6 +51,20 @@ typedef struct {
 typedef unordered_map<string, bandwidth_table_t, IdHash> allocate_table_t;
 
 /**
+ * @brief 带宽调度分配表
+ */
+typedef unordered_map<string, uint32_t, IdHash> score_board_t;
+
+/**
+ * @brief 文件路径
+ */
+static const string demand_path = "data/demand.csv";
+static const string bandwidth_path = "data/site_bandwidth.csv";
+static const string qos_path = "data/qos.csv";
+static const string qos_constrain_path = "data/config.ini";
+static const string output_path = "output/solution.txt";
+
+/**
  * @brief 数据预处理
  * 
  * @param demand_table 客户节点带宽需求
@@ -68,7 +82,7 @@ void data_loader(demand_table_t &demand_table,
     stringstream ss;
 
     // 读取 demand.csv
-    fs.open("data/demand.csv", ios::in);
+    fs.open(demand_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer);
@@ -91,7 +105,7 @@ void data_loader(demand_table_t &demand_table,
     fs.close();
 
     // 读取 site_bandwidth.csv
-    fs.open("data/site_bandwidth.csv", ios::in);
+    fs.open(bandwidth_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer); // 忽略表头
@@ -107,7 +121,7 @@ void data_loader(demand_table_t &demand_table,
     fs.close();
 
     // 读取 qos.csv
-    fs.open("data/qos.csv", ios::in);
+    fs.open(qos_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer);
@@ -131,7 +145,7 @@ void data_loader(demand_table_t &demand_table,
     fs.close();
 
     // 读取 qos_constrain
-    fs.open("data/config.ini", ios::in);
+    fs.open(qos_constrain_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer); // 忽略头部
@@ -147,7 +161,7 @@ void data_loader(demand_table_t &demand_table,
  */
 void data_output(vector<allocate_table_t> &allocate_tables) {
     ofstream fs;
-    fs.open("output/solution.txt", ios::out);
+    fs.open(output_path, ios::out);
     if (!fs)
         exit(-1);
     for (int i = 0; i < allocate_tables.size(); ++i) {
@@ -177,12 +191,24 @@ vector<string> get_valid_server(const string &client_id, qos_table_t &qos_table,
     return ret;
 }
 
-string get_match_server(vector<string> &server_id, bandwidth_table_t &server_bandwidth) {
+string get_constrained_server(vector<string> &server_id, bandwidth_table_t &global_bandwidth, bandwidth_table_t &server_bandwidth, score_board_t &score_board, uint32_t score_constrain) {
+    int idx = -1;
+    int max = -1;
+    for (int i = 0; i < server_id.size(); ++i) {
+        if (max < (int)global_bandwidth[server_id[i]] && server_bandwidth[server_id[i]] > 0 && score_board[server_id[i]] <= score_constrain) {
+            max = (int)global_bandwidth[server_id[i]];
+            idx = i;
+        }
+    }
+    return idx == -1 ? "" : server_id[idx];
+}
+
+string get_unconstrained_server(vector<string> &server_id, bandwidth_table_t &global_bandwidth, bandwidth_table_t &server_bandwidth) {
     int idx = 0;
     int min = 0x7fffffff;
     for (int i = 0; i < server_id.size(); ++i) {
-        if (min > server_bandwidth[server_id[i]]) {
-            min = server_bandwidth[server_id[i]];
+        if (min > global_bandwidth[server_id[i]] && server_bandwidth[server_id[i]] > 0) {
+            min = global_bandwidth[server_id[i]];
             idx = i;
         }
     }
@@ -191,10 +217,12 @@ string get_match_server(vector<string> &server_id, bandwidth_table_t &server_ban
 
 allocate_table_t calculate_atime(demand_table_t &demand_table,
                                  uint32_t demand_index,
+                                 bandwidth_table_t &bandwidth_table,
                                  qos_table_t &qos_table,
                                  uint32_t qos_constraint,
-                                 bandwidth_table_t &bandwidth_table) {
-    uint32_t slice = 100;
+                                 score_board_t &score_board,
+                                 uint32_t score_constrain) {
+    uint32_t slice = 1000;
     allocate_table_t client_bandwidth;
     bandwidth_table_t server_bandwidth(bandwidth_table);
     bandwidth_table_t global_bandwidth;
@@ -213,13 +241,24 @@ allocate_table_t calculate_atime(demand_table_t &demand_table,
         auto front = demand_queue.front();
         demand_queue.pop();
         auto& valid_server = valid_server_list[front.first];
-        auto match_server = get_match_server(valid_server, global_bandwidth);
+        auto match_server = get_constrained_server(valid_server, global_bandwidth, server_bandwidth, score_board, score_constrain);
+        if (match_server.empty() || server_bandwidth[match_server] == 0) {
+            match_server = get_unconstrained_server(valid_server, global_bandwidth, server_bandwidth);
+        }
         uint32_t s = min(slice, min(front.second, server_bandwidth[match_server]));
         client_bandwidth[front.first][match_server] += s;
         server_bandwidth[match_server] -= s;
         global_bandwidth[match_server] += s;
         front.second -= s;
-        if (front.second > 0) demand_queue.push(front);
+        if (front.second > 0) {
+            demand_queue.push(front);
+        }
+    }
+
+    for (const auto [id, bandwidth] : global_bandwidth) {
+        if (bandwidth > 1000) {
+            score_board[id]++;
+        }
     }
 
     return client_bandwidth;
@@ -239,6 +278,8 @@ vector<allocate_table_t> calculate(demand_table_t &demand_table,
                                    qos_table_t &qos_table,
                                    uint32_t qos_constraint) {
     vector<allocate_table_t> ret(demand_table.demand_value.size());
+    score_board_t score_board;
+    uint32_t score_constrain = floor(demand_table.demand_value.size() * 0.05) - 2;
     for (int i = 0; i < demand_table.demand_value.size(); ++i) {
         int sum = 0;
         for (int j = 0; j < demand_table.demand_value[i].size(); ++j) {
@@ -255,7 +296,8 @@ vector<allocate_table_t> calculate(demand_table_t &demand_table,
         demand_table.demand_value[i].pop_back();
         int idx = demand_table.demand_value[i].back();
         demand_table.demand_value[i].pop_back();
-        ret[idx] = calculate_atime(demand_table, i, qos_table, qos_constraint, bandwidth_table);
+        ret[idx] = calculate_atime(demand_table, i, bandwidth_table, qos_table, qos_constraint, score_board, score_constrain);
+        cout << i << endl;
     }
     return ret;
 }
