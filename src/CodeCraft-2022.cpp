@@ -6,6 +6,8 @@
 #include <string>
 #include <unordered_map>
 #include <cmath>
+#include <random>
+#include <algorithm>
 
 using namespace std;
 
@@ -50,6 +52,20 @@ typedef struct {
 typedef unordered_map<string, bandwidth_table_t, IdHash> allocate_table_t;
 
 /**
+ * @brief 带宽调度分配表
+ */
+typedef unordered_map<string, uint32_t, IdHash> score_board_t;
+
+/**
+ * @brief 文件路径
+ */
+static const string demand_path = "data/demand.csv";
+static const string bandwidth_path = "data/site_bandwidth.csv";
+static const string qos_path = "data/qos.csv";
+static const string qos_constrain_path = "data/config.ini";
+static const string output_path = "output/solution.txt";
+
+/**
  * @brief 数据预处理
  * 
  * @param demand_table 客户节点带宽需求
@@ -67,15 +83,17 @@ void data_loader(demand_table_t &demand_table,
     stringstream ss;
 
     // 读取 demand.csv
-    fs.open("data/demand.csv", ios::in);
+    fs.open(demand_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer);
     ss = stringstream(line_buffer);
     getline(ss, element_buffer, ','); // 忽略表名
     for (int i = 0; getline(ss, element_buffer, ','); ++i) {
-        if (int pos = element_buffer.find('\r') != -1) element_buffer.erase(pos, 1);
-        if (int pos = element_buffer.find('\n') != -1) element_buffer.erase(pos, 1);
+        if (int pos = element_buffer.find('\r') != -1)
+            element_buffer.erase(pos, 1);
+        if (int pos = element_buffer.find('\n') != -1)
+            element_buffer.erase(pos, 1);
         demand_table.id_map[element_buffer] = i;
     }
     while (getline(fs, line_buffer)) {
@@ -90,7 +108,7 @@ void data_loader(demand_table_t &demand_table,
     fs.close();
 
     // 读取 site_bandwidth.csv
-    fs.open("data/site_bandwidth.csv", ios::in);
+    fs.open(bandwidth_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer); // 忽略表头
@@ -98,23 +116,27 @@ void data_loader(demand_table_t &demand_table,
         string id_buffer;
         ss = stringstream(line_buffer);
         getline(ss, id_buffer, ',');
-        if (int pos = id_buffer.find('\r') != -1) id_buffer.erase(pos, 1);
-        if (int pos = id_buffer.find('\n') != -1) id_buffer.erase(pos, 1);
+        if (int pos = id_buffer.find('\r') != -1)
+            id_buffer.erase(pos, 1);
+        if (int pos = id_buffer.find('\n') != -1)
+            id_buffer.erase(pos, 1);
         getline(ss, element_buffer);
         bandwidth_table[id_buffer] = stoi(element_buffer);
     }
     fs.close();
 
     // 读取 qos.csv
-    fs.open("data/qos.csv", ios::in);
+    fs.open(qos_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer);
     ss = stringstream(line_buffer);
     getline(ss, element_buffer, ','); // 忽略表名
     for (int i = 0; getline(ss, element_buffer, ','); ++i) {
-        if (int pos = element_buffer.find('\r') != -1) element_buffer.erase(pos, 1);
-        if (int pos = element_buffer.find('\n') != -1) element_buffer.erase(pos, 1);
+        if (int pos = element_buffer.find('\r') != -1)
+            element_buffer.erase(pos, 1);
+        if (int pos = element_buffer.find('\n') != -1)
+            element_buffer.erase(pos, 1);
         qos_table.client_id_map[element_buffer] = i;
     }
     for (int i = 0; getline(fs, line_buffer); ++i) {
@@ -130,7 +152,7 @@ void data_loader(demand_table_t &demand_table,
     fs.close();
 
     // 读取 qos_constrain
-    fs.open("data/config.ini", ios::in);
+    fs.open(qos_constrain_path, ios::in);
     if (!fs)
         exit(-1);
     getline(fs, line_buffer); // 忽略头部
@@ -146,7 +168,7 @@ void data_loader(demand_table_t &demand_table,
  */
 void data_output(vector<allocate_table_t> &allocate_tables) {
     ofstream fs;
-    fs.open("output/solution.txt", ios::out);
+    fs.open(output_path, ios::out);
     if (!fs)
         exit(-1);
     for (int i = 0; i < allocate_tables.size(); ++i) {
@@ -166,6 +188,13 @@ void data_output(vector<allocate_table_t> &allocate_tables) {
     fs.close();
 }
 
+/**
+ * @brief 求满足QOS限制的边缘节点
+ * 
+ * @param client_id 客户id
+ * @param qos_table 客户节点与边缘节点的网络时延
+ * @param qos_constraint QoS限制
+ */
 vector<string> get_valid_server(const string &client_id, qos_table_t &qos_table, uint32_t qos_constraint) {
     vector<string> ret;
     for (const auto [server_id, server_index] : qos_table.server_id_map) {
@@ -176,30 +205,81 @@ vector<string> get_valid_server(const string &client_id, qos_table_t &qos_table,
     return ret;
 }
 
-string get_match_server(vector<string> &server_id, bandwidth_table_t &server_bandwidth) {
-    int idx = 0;
-    int max = 0;
+/**
+ * @brief 求95百分位之前的节点进行单独分配
+ * 
+ * @param server_id 边缘节点id
+ * @param global_bandwidth 边缘节点已分配带宽
+ * @param server_bandwidth 边缘节点剩余带宽
+ * @param score_board 95百分位计分板
+ * @param score_constrain 前95百分位计分限制
+ */
+string get_constrained_server(vector<string> &server_id, bandwidth_table_t &global_bandwidth, bandwidth_table_t &server_bandwidth, score_board_t &score_board, uint32_t score_constrain) {
+    int idx = -1;
+    int max = -1;
     for (int i = 0; i < server_id.size(); ++i) {
-        if (max < server_bandwidth[server_id[i]]) {
-            max = server_bandwidth[server_id[i]];
+        if (max < (int)global_bandwidth[server_id[i]] && server_bandwidth[server_id[i]] > 0 && score_board[server_id[i]] <= score_constrain) {
+            max = (int)global_bandwidth[server_id[i]];
+            idx = i;
+        }
+    }
+    return idx == -1 ? "" : server_id[idx];
+}
+/**
+ * @brief 求95百分位之后的节点进行平均分配
+ * 
+ * @param server_id 边缘节点id
+ * @param global_bandwidth 边缘节点已分配带宽
+ * @param server_bandwidth 边缘节点剩余带宽
+ */
+string get_unconstrained_server(vector<string> &server_id, bandwidth_table_t &global_bandwidth, bandwidth_table_t &server_bandwidth) {
+    int idx = 0;
+    int min = 0x7fffffff;
+    for (int i = 0; i < server_id.size(); ++i) {
+        if (min > global_bandwidth[server_id[i]] && server_bandwidth[server_id[i]] > 0) {
+            min = global_bandwidth[server_id[i]];
             idx = i;
         }
     }
     return server_id[idx];
 }
 
+/**
+ * @brief 计算每一时刻的分配表
+ * 
+ * @param demand_table 客户节点带宽需求
+ * @param demand_table 带宽请求下标
+ * @param bandwidth_table 边缘节点带宽上限
+ * @param qos_table 客户节点与边缘节点的网络时延
+ * @param qos_constraint QoS限制
+ * @param score_board 95百分位计分板
+ * @param score_constrain 前95百分位计分限制
+ */
 allocate_table_t calculate_atime(demand_table_t &demand_table,
                                  uint32_t demand_index,
+                                 bandwidth_table_t &bandwidth_table,
                                  qos_table_t &qos_table,
                                  uint32_t qos_constraint,
-                                 bandwidth_table_t &bandwidth_table) {
-    uint32_t slice = 100;
+                                 score_board_t &score_board,
+                                 uint32_t score_constrain) {
+    uint32_t slice = 1500;
     allocate_table_t client_bandwidth;
     bandwidth_table_t server_bandwidth(bandwidth_table);
+    bandwidth_table_t global_bandwidth;
     queue<pair<string, uint32_t>> demand_queue;
     unordered_map<string, vector<string>, IdHash> valid_server_list;
+    vector<string> random_id;
 
-    for (const auto& [client_id, client_index] : demand_table.id_map) {
+    for (const auto& [client_id, _] : demand_table.id_map) {
+        random_id.emplace_back(client_id);
+    }
+    
+    random_device rd;
+    mt19937 rng(rd());
+    shuffle(random_id.begin(), random_id.end(), rng);
+
+    for (const auto& client_id : random_id) {
+        auto client_index = demand_table.id_map[client_id];
         auto client_demand = demand_table.demand_value[demand_index][client_index];
         client_bandwidth[client_id] = {};
         if (client_demand > 0) {
@@ -207,36 +287,28 @@ allocate_table_t calculate_atime(demand_table_t &demand_table,
             valid_server_list[client_id] = get_valid_server(client_id, qos_table, qos_constraint);
         }
     }
+
     while (!demand_queue.empty()) {
         auto front = demand_queue.front();
         demand_queue.pop();
         auto& valid_server = valid_server_list[front.first];
-        auto match_server = get_match_server(valid_server, server_bandwidth);
-        if (front.second > slice) {
-            if (server_bandwidth[match_server] >= slice) {
-                client_bandwidth[front.first][match_server] += slice;
-                server_bandwidth[match_server] -= slice;
-                front.second -= slice;
-                demand_queue.push(front);
-            }
-            else {
-                client_bandwidth[front.first][match_server] += server_bandwidth[match_server];
-                front.second -= server_bandwidth[match_server];
-                server_bandwidth[match_server] = 0;
-                demand_queue.push(front);
-            }
+        auto match_server = get_constrained_server(valid_server, global_bandwidth, server_bandwidth, score_board, score_constrain);
+        if (match_server.empty() || server_bandwidth[match_server] == 0) {
+            match_server = get_unconstrained_server(valid_server, global_bandwidth, server_bandwidth);
         }
-        else {
-            if (server_bandwidth[match_server] >= front.second) {
-                client_bandwidth[front.first][match_server] += front.second;
-                server_bandwidth[match_server] -= front.second;
-            }
-            else {
-                client_bandwidth[front.first][match_server] += server_bandwidth[match_server];
-                front.second -= server_bandwidth[match_server];
-                server_bandwidth[match_server] = 0;
-                demand_queue.push(front);
-            }
+        uint32_t s = min(slice, min(front.second, server_bandwidth[match_server]));
+        client_bandwidth[front.first][match_server] += s;
+        server_bandwidth[match_server] -= s;
+        global_bandwidth[match_server] += s;
+        front.second -= s;
+        if (front.second > 0) {
+            demand_queue.push(front);
+        }
+    }
+
+    for (const auto [id, bandwidth] : global_bandwidth) {
+        if (bandwidth > 15000) {
+            score_board[id]++;
         }
     }
 
@@ -256,9 +328,27 @@ vector<allocate_table_t> calculate(demand_table_t &demand_table,
                                    bandwidth_table_t &bandwidth_table,
                                    qos_table_t &qos_table,
                                    uint32_t qos_constraint) {
-    vector<allocate_table_t> ret;
+    vector<allocate_table_t> ret(demand_table.demand_value.size());
+    score_board_t score_board;
+    uint32_t score_constrain = floor(demand_table.demand_value.size() * 0.04);
     for (int i = 0; i < demand_table.demand_value.size(); ++i) {
-        ret.emplace_back(calculate_atime(demand_table, i, qos_table, qos_constraint, bandwidth_table));
+        int sum = 0;
+        for (int j = 0; j < demand_table.demand_value[i].size(); ++j) {
+            sum += demand_table.demand_value[i][j];
+        }
+        demand_table.demand_value[i].push_back(i);
+        demand_table.demand_value[i].push_back(sum);
+    }
+    sort(demand_table.demand_value.begin(), demand_table.demand_value.end(), [](vector<uint32_t>& a, vector<uint32_t>& b){
+        return a.back() > b.back();
+    });
+    for (int i = 0; i < demand_table.demand_value.size(); ++i) {
+        int sum = demand_table.demand_value[i].back();
+        demand_table.demand_value[i].pop_back();
+        int idx = demand_table.demand_value[i].back();
+        demand_table.demand_value[i].pop_back();
+        ret[idx] = calculate_atime(demand_table, i, bandwidth_table, qos_table, qos_constraint, score_board, score_constrain);
+        cout << i << endl;
     }
     return ret;
 }
