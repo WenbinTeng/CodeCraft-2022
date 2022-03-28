@@ -150,6 +150,7 @@ def readSolution(dir):
 
 def billing():
     sum=[]
+    cnt=0
     for i in range(len(Site)):
         charge_95=sorted(Site[i].used)
         point=math.ceil(len(charge_95)*0.95)-1
@@ -157,19 +158,24 @@ def billing():
         sum.append(val)
         if val != 0:
             print(i, val)
+            cnt+=1
+    print("cnt:",cnt)
     return sum
 
 
 if __name__ == '__main__':
     #读取输入文件
+    # type = "simulated_data_2000"
+    # type = "pressure_data"
     type = "simulated_data_4000"
+    # type = "data"
     
     demandFile = type + '/demand.csv'
     site_bandwidthFile = type + '/site_bandwidth.csv'
     solutionFile = 'output/solution.txt'
     qosFile = type + '/qos.csv'
 
-    qos_constraint = 274
+    qos_constraint = 500
     Client,Client_Count,Time_count=readDemand(demandFile)
     Site = readSite(site_bandwidthFile)
     readQos(qosFile)
